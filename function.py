@@ -20,41 +20,38 @@ Ações =
 3 - 0, +0,1
 4 - 0, -0.1 
 Tomando o plano xy, então:
-ação 0 anda para direita
-ação 1 anda para esquerda
-ação 2 anda para cima
-ação 3 anda para baixo
+ação 1 anda para direita
+ação 2 anda para esquerda
+ação 3 anda para cima
+ação 4 anda para baixo
 """
 import numpy as np
 from gym import spaces
 
 class Funcao:
-    def __init__(self, p0x = -2, p0y = -2, tamanho_passo = 0.2, limite_x = 2.0, limite_y = 2.0):
+    def __init__(self, p0x = -1, p0y = -1, tamanho_passo = 0.2, limite_x = 2.0, limite_y = 2.0):
         self.p0x = p0x # Posição inicial x do a gente
         self.px = p0x # Posição inicial x do agente
         self.p0y = p0y
         self.py = p0y # Posição inicial y do agente
         self.tamanho_passo = tamanho_passo # Tamanho do passo que o algoritmo poderá dar
-        self.sum_reward = 0
         if (limite_x > 5):
             limite_x = 5
         self.limite_x = limite_x # Limite do domínio em x
         if (limite_y > 5):
             limite_y = 5
+        self.action_space = spaces.Discrete(4)
         self.limite_y = limite_y # Limite do domínio em y
         self.lastcurz = self.z(self.px,self.py) # Essa variável é utilizada para calcular a recompensa
         self.curz = self.z(self.px,self.py) # Variável que retorna o valor Z da função
-        # Descreve a action space
-        self.action_space = spaces.Box( low=np.array([-0.1,-0.1]), high=np.array([0.1, 0.1]), dtype=np.float32)
-        # Descreve a observation space
-        self.observation_space = spaces.Box( low=np.array([-2.,-2.,]), high=np.array([2.,2.]), dtype=np.float32)
+        self.sum_reward = 0 # Soma das recompensas
 
     def reset(self):
         self.px = self.p0x # Posição inicial x do agente
         self.py = self.p0y # Posição inicial y do agente
         self.lastcurz = self.z(self.px,self.py) # Essa variável é utilizada para calcular a recompensa
         self.curz = self.z(self.px,self.py) # Variável que retorna o valor Z da função
-        self.sum_reward = 0
+        return [self.px, self.py]
 
     def update_z(self):
         # Atualiza o valor da função Z
@@ -68,6 +65,8 @@ class Funcao:
         """
         if self.curz == 0: # Achou o máximo global
             return 10.0
+        elif (self.curz < 0.01 and self.curz > -0.01): # Perto suficiente do máximo global
+            return 10.0 
         elif (self.px > self.limite_x) or (self.px < (-1)*self.limite_x): # Saiu do limite no eixo x
             return -10.0
         elif (self.py > self.limite_y) or (self.py < (-1)*self.limite_y): # Saiu do limite no eixo y
@@ -75,7 +74,8 @@ class Funcao:
         else:
             # Caso se aproxima do máximo global, aumenta
             # Senão diminui.
-            return self.curz - self.lastcurz 
+            #return self.curz - self.lastcurz 
+            return self.lastcurz - self.curz
 
     def terminate(self):
         """
@@ -89,12 +89,24 @@ class Funcao:
             return True
         elif (self.curz == 0): # CUIDADO!! Lembrar que a conversão de dec to bin.
             return True
+        elif (self.curz < 0.01 and self.curz > -0.01): # Chegou próximo suficiente do máximo local
+            return True
         else:
             return False
 
-
     def get_next_pos(self, action):
-        return self.px+action[0], self.py+action[1]
+        """
+        Essa função retorna a próxima posição
+        """
+        if action == 0:
+            return self.px + self.tamanho_passo, self.py
+        elif action == 1:
+            return self.px - self.tamanho_passo, self.py
+        elif action == 2:
+            return self.px, self.py + self.tamanho_passo
+        else:
+            return self.px, self.py - self.tamanho_passo
+            
 
     def update_pos(self, obs):
         """
@@ -116,23 +128,39 @@ class Funcao:
         print("x:",self.px)
         print("y:",self.py)
 
+
+    def pos_to_num(self, x, y):
+        """
+        Essa função mapeia uma tupla (x,y) dentro do domínio para um valor z
+        Como os passos são de 0.2, entre -2 e 2, então irei mapear os 2 primeiros
+        digitos para o valor em y e os 2 maiores digitos para o valor de x
+        ou seja [-1.8, -1.8]
+        se transformara em
+        1-1
+        Para o processamento dentro do dicionário
+        """
+        new_y = round((y+self.limite_x)/self.tamanho_passo)
+        new_x = round((x+self.limite_y)/self.tamanho_passo)
+        str_x = str(new_x)
+        str_y = str(new_y)
+        array_value  = str_x +'-'+ str_y
+        return array_value
+
     """
     As funções a seguir foram criadas para manter o padrão dos ambientes do gym
     """
     def step(self, action):
-        obs = self.get_next_pos(action) # Obtém a informação do próximo estado
+        obs = self.get_next_pos(action) # Obtém a informação do próximo estado3
         self.update_pos(obs) # Ajusta o estado para o novo estado
+        self.update_z() # Atualizando o valor z
         obs = [self.px,self.py]
         reward = self.get_reward() # Obtém a recompensa
         self.sum_reward += reward
         done = self.terminate() # Verifica se o jogo terminou
         return obs, reward, done, 0 # Esse útlimo valor é utilizado apenas para debug nos ambientes GYM. Então, resolvi passar 0 apenas para manter o padrão
-    
 
 """
 Essa main foi criada para verificar se o programa está funcionando de maneira correta
-"""
-
 """
 if __name__ == "__main__":
     f = Funcao()
@@ -146,25 +174,3 @@ if __name__ == "__main__":
         f.update_z()
         print("A recompensa foi: "+str(f.recompensa()))
     print("GG: tentou ir pra pos",f.px,f.py)
-"""
-
-"""
-Main criada para verificar o funcionamento das funções análogas ao gym
-"""
-if __name__ == "__main__":
-    f = Funcao()
-    ex = 0
-    print(f.action_space.sample())
-    while ex == 0:
-        f.reset()
-        terminate = f.terminate()
-        while (terminate == False):
-            action = int(input('Digite uma ação de 0 a 3'))
-            obs, reward, done , _ = f.step(action)
-            print("Você chegou em: "+ str(obs))
-            print("Sua recompensa foi: "+ str(reward))
-            terminate = done
-            if terminate == True:
-                print("Fim de jogo: recompensa final = "+str(f.sum_reward))
-        ex = int(input("Digite 0 para continuar e qualquer número para sair"))
-

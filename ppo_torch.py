@@ -138,11 +138,13 @@ class Agent:
         state = T.tensor([observation], dtype=T.float).to(self.actor.device)
 
         dist = self.actor(state)
+        
         value = self.critic(state)
         action = dist.sample()
 
         probs = T.squeeze(dist.log_prob(action)).item()
         action = T.squeeze(action).item()
+        import pdb;breakpoint()
         value = T.squeeze(value).item()
 
         return action, probs, value
